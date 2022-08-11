@@ -2,7 +2,6 @@ package handler
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/go-acme/lego/certificate"
@@ -11,29 +10,23 @@ import (
 	"github.com/pkg/errors"
 )
 
-const (
-	// domainsJoinChar is the default char to join domains list
-	domainsJoinChar = ", "
-)
-
 var (
 	// registerOptions is the predefined registration.RegisterOptions struct with the default params
 	registerOptions = registration.RegisterOptions{TermsOfServiceAgreed: true}
 )
 
 // Obtain creates a new SSL certificate or renews existing one for the given domains with the given email
-func (h *CertificateHandler) Obtain(domains []string, email string) error {
-	domainsStr := strings.Join(domains, domainsJoinChar)
+func (h *CertificateHandler) Obtain(domain string, email string) error {
 
 	// Check if there is existing an certificate for the given domains
-	existingCert, err := h.store.Load(domains)
+	existingCert, err := h.store.Load(domain)
 	if err != nil {
 		return errors.Wrap(err, "handler: unable to load existing certificate")
 	}
 
 	if existingCert != nil {
 		if sub := existingCert.NotAfter.Sub(time.Now()).Hours(); int(sub) > h.renewBefore {
-			h.log.Infof("[%s] handler: left %d days to certificate will be expired", domainsStr, time.Duration(sub/24))
+			h.log.Infof("[%s] handler: left %d days to certificate will be expired", domain, time.Duration(sub/24))
 			return nil
 		}
 	}
@@ -68,7 +61,7 @@ func (h *CertificateHandler) Obtain(domains []string, email string) error {
 
 	// Create a new request to obtain certificate
 	crt, err := client.Certificate.Obtain(certificate.ObtainRequest{
-		Domains:    domains,
+		Domains:    []string{domain},
 		PrivateKey: nil,
 		Bundle:     false,
 		MustStaple: false,
@@ -78,23 +71,28 @@ func (h *CertificateHandler) Obtain(domains []string, email string) error {
 	}
 
 	// Store the obtained certificate
-	if err := h.store.Store(crt, domains); err != nil {
+	if err := h.store.Store(crt, domain); err != nil {
 		return errors.Wrap(err, "handler: unable to store certificates")
 	}
 
 	// Notify that the certificate has been obtained for the given domains
 	if len(h.notificationTopic) > 0 {
-		if err := h.notifier.Notify(h.notificationTopic, h.buildPublishMessage(domainsStr)); err != nil {
+		if err := h.notifier.Notify(h.notificationTopic, h.buildPublishMessage(domain)); err != nil {
 			return errors.Wrap(err, "handler: failed to publish notification")
 		}
 	}
 
 	// Store user's private key into config file by the config path
-	if err := certUser.StorePrivateKey(h.configDir); err != nil {
+	var encodedPrivKey string
+	if encodedPrivKey, err = certUser.GetEncodedPrivateKey(); err != nil {
+		return errors.Wrap(err, "handler: unable to encode user's private key")
+	}
+
+	if err := h.secret.Store(domain, encodedPrivKey); err != nil {
 		return errors.Wrap(err, "handler: unable to store user's private key")
 	}
 
-	h.log.Infof("[%s] handler: certificate successfully obtained and stored", domainsStr)
+	h.log.Infof("[%s] handler: certificate successfully obtained and stored", domain)
 
 	return nil
 }

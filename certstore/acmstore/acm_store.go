@@ -1,8 +1,6 @@
 package acmstore
 
 import (
-	"strings"
-
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/service/acm"
@@ -11,7 +9,6 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/begmaroman/acme-dns-route53/certstore"
-	"github.com/begmaroman/acme-dns-route53/utils/strsl"
 )
 
 var (
@@ -35,23 +32,21 @@ func New(provider client.ConfigProvider, log *logrus.Logger) certstore.CertStore
 }
 
 // Store implements CertStore interface
-func (a *acmStore) Store(cert *certificate.Resource, domains []string) error {
+func (a *acmStore) Store(cert *certificate.Resource, domain string) error {
 	if cert == nil || cert.Certificate == nil {
 		return ErrCertificateMissing
 	}
 
-	domainsListString := strings.Join(domains, ", ")
-
-	a.log.Infof("[%s] acm: Retrieving server certificate", domainsListString)
+	a.log.Infof("[%s] acm: Retrieving server certificate", domain)
 
 	serverCert, err := retrieveServerCertificate(cert.Certificate)
 	if err != nil {
 		return errors.Wrap(err, "acm: unable to retrieve server certificate")
 	}
 
-	a.log.Infof("[%s] acm: Finding existing server certificate in ACM", domainsListString)
+	a.log.Infof("[%s] acm: Finding existing server certificate in ACM", domain)
 
-	existingCert, err := a.findExistingCertificate(domains)
+	existingCert, err := a.findExistingCertificate(domain)
 	if err != nil {
 		return errors.Wrap(err, "acm: unable to find existing certificate")
 	}
@@ -63,7 +58,7 @@ func (a *acmStore) Store(cert *certificate.Resource, domains []string) error {
 	}
 
 	if certArn != nil {
-		a.log.Infof("[%s] acm: Found existing server certificate in ACM with Arn = '%s'", domainsListString, aws.StringValue(certArn))
+		a.log.Infof("[%s] acm: Found existing server certificate in ACM with Arn = '%s'", domain, aws.StringValue(certArn))
 	}
 
 	// Init request parameters
@@ -79,14 +74,14 @@ func (a *acmStore) Store(cert *certificate.Resource, domains []string) error {
 		return errors.Wrap(err, "acm: unable to store certificate into ACM")
 	}
 
-	a.log.Infof("[%s] acm: Imported certificate data in ACM with Arn = '%s'", domainsListString, aws.StringValue(resp.CertificateArn))
+	a.log.Infof("[%s] acm: Imported certificate data in ACM with Arn = '%s'", domain, aws.StringValue(resp.CertificateArn))
 
 	return nil
 }
 
 // Load loads certificate by the given domains
-func (a *acmStore) Load(domains []string) (*certstore.CertificateDetails, error) {
-	cert, err := a.findExistingCertificate(domains)
+func (a *acmStore) Load(domain string) (*certstore.CertificateDetails, error) {
+	cert, err := a.findExistingCertificate(domain)
 	if err != nil {
 		return nil, errors.Wrap(err, "acm: unable to find certificate")
 	}
@@ -95,7 +90,7 @@ func (a *acmStore) Load(domains []string) (*certstore.CertificateDetails, error)
 }
 
 // findExistingCertificate look ups a certificate in ACm by the given domains
-func (a *acmStore) findExistingCertificate(domains []string) (*acm.CertificateDetail, error) {
+func (a *acmStore) findExistingCertificate(domain string) (*acm.CertificateDetail, error) {
 	listResp, err := a.acm.ListCertificates(&acm.ListCertificatesInput{
 		MaxItems: aws.Int64(1000),
 	})
@@ -112,8 +107,10 @@ func (a *acmStore) findExistingCertificate(domains []string) (*acm.CertificateDe
 		}
 
 		altNames := aws.StringValueSlice(certResp.Certificate.SubjectAlternativeNames)
-		if strsl.ContainsSub(domains, altNames) {
-			return certResp.Certificate, nil
+		for _, altName := range altNames {
+			if altName == domain {
+				return certResp.Certificate, nil
+			}
 		}
 	}
 

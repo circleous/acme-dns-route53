@@ -8,17 +8,19 @@ import (
 )
 
 const (
-	domainsSeparator   = ","
-	defaultConfigPath  = ""
-	defaultTopic       = ""
-	defaultRenewBefore = 30
+	domainsSeparator       = ","
+	defaultSecretStoreType = "file"
+	defaultConfigPath      = ""
+	defaultTopic           = ""
+	defaultRenewBefore     = 30
 
-	flagDomains     = "domains"
-	flagEmail       = "email"
-	flagConfigPath  = "config-path"
-	flagStaging     = "staging"
-	flagTopic       = "topic"
-	flagRenewBefore = "renew-before"
+	flagDomains         = "domains"
+	flagEmail           = "email"
+	flagConfigPath      = "config-path"
+	flagSecretStoreType = "secret-store-type"
+	flagStaging         = "staging"
+	flagTopic           = "topic"
+	flagRenewBefore     = "renew-before"
 )
 
 // AddDomainsFlag adds the domains flag to the command
@@ -40,6 +42,16 @@ func AddEmailFlag(c *cobra.Command) {
 // GetEmailFlagValue gets the value of the email flag from the command
 func GetEmailFlagValue(c *cobra.Command) string {
 	return c.Flag(flagEmail).Value.String()
+}
+
+// AddSecretStoreTypeFlag adds the email flag to the command
+func AddSecretStoreTypeFlag(c *cobra.Command) {
+	AddPersistentStringFlag(c, flagSecretStoreType, defaultSecretStoreType, "Private key store type (file, ssm-parameter, secret-manager)", false)
+}
+
+// GetSecretStoreTypeFlagValue gets the value of the email flag from the command
+func GetSecretStoreTypeFlagValue(c *cobra.Command) string {
+	return c.Flag(flagSecretStoreType).Value.String()
 }
 
 // AddConfigPathFlag adds the config path flag to the command

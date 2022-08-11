@@ -10,6 +10,10 @@ import (
 	"github.com/begmaroman/acme-dns-route53/handler"
 	"github.com/begmaroman/acme-dns-route53/handler/r53dns"
 	"github.com/begmaroman/acme-dns-route53/notifier/awsns"
+	"github.com/begmaroman/acme-dns-route53/secretstore"
+	"github.com/begmaroman/acme-dns-route53/secretstore/filestore"
+	"github.com/begmaroman/acme-dns-route53/secretstore/secretmanagerstore"
+	"github.com/begmaroman/acme-dns-route53/secretstore/ssmparameterstore"
 )
 
 const (
@@ -32,9 +36,14 @@ type Payload struct {
 	Staging     string   `json:"staging"`
 	Topic       string   `json:"topic"`
 	RenewBefore int      `json:"renew_before"`
+
+	SecretStoreType   string `json:"secret_store_type"`
+	SecretStorePrefix string `json:"secret_store_prefix"`
 }
 
 func HandleLambdaEvent(payload Payload) error {
+	var err error
+
 	conf := InitConfig(payload)
 
 	// Domains list must not be empty
@@ -49,9 +58,22 @@ func HandleLambdaEvent(payload Payload) error {
 
 	log := logrus.New()
 
+	var secretStore secretstore.SecretStore
+	if conf.SecretStoreType == "ssm-parameter" {
+		secretStore = ssmparameterstore.New(AWSSession, conf.SecretStorePrefix, log)
+	} else if conf.SecretStoreType == "secret-manager" {
+		secretStore = secretmanagerstore.New()
+	} else {
+		// Fallback using file store, force using tmp since we are in lambda env
+		secretStore, err = filestore.New("/tmp", log)
+		if err != nil {
+			logrus.Errorf("unable to init file-store: %s\n", err)
+			return err
+		}
+	}
+
 	// Create a new handler
 	certificateHandler := handler.NewCertificateHandler(&handler.CertificateHandlerOptions{
-		ConfigDir:         ConfigDir,
 		Staging:           conf.Staging,
 		NotificationTopic: conf.Topic,
 		RenewBefore:       conf.RenewBefore * 24,
@@ -59,18 +81,19 @@ func HandleLambdaEvent(payload Payload) error {
 		Notifier:          awsns.New(AWSSession, log),    // Initialize SNS API client
 		DNS01:             r53dns.New(AWSSession, log),   // Initialize DNS-01 challenge provider by Route 53
 		Store:             acmstore.New(AWSSession, log), // Initialize ACM client
+		SecretStore:       secretStore,
 	})
 
 	var wg sync.WaitGroup
 	for _, domain := range conf.Domains {
 		wg.Add(1)
-		go func(domainList []string) {
+		go func(domainCopy string) {
 			defer wg.Done()
 
-			if err := certificateHandler.Obtain(domainList, conf.Email); err != nil {
-				logrus.Errorf("[%s] unable to obtain certificate: %s\n", domain, err)
+			if err := certificateHandler.Obtain(domainCopy, conf.Email); err != nil {
+				logrus.Errorf("[%s] unable to obtain certificate: %s\n", domainCopy, err)
 			}
-		}([]string{domain})
+		}(domain)
 	}
 	wg.Wait()
 

@@ -9,9 +9,9 @@ import (
 // CertStore represents the interface to CRUD certificates
 type CertStore interface {
 	// Store represents logic to store the given certificate for the given domains
-	Store(certificate *certificate.Resource, domains []string) error
+	Store(certificate *certificate.Resource, domains string) error
 
-	Load(domains []string) (*CertificateDetails, error)
+	Load(domains string) (*CertificateDetails, error)
 }
 
 // CertificateDetails contains certificate details

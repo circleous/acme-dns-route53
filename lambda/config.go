@@ -26,6 +26,12 @@ const (
 
 	// RenewBeforeEnvVar is the name of env var which contains the number of days defining the period before expiration within which a certificate must be renewed
 	RenewBeforeEnvVar = "RENEW_BEFORE"
+
+	// SecretStoreTypeEnvVar is the name of env var which contains secret store type
+	SecretStoreTypeEnvVar = "SECRET_STORE_TYPE"
+
+	// SecretStorePrefixEnvVar is the name of env var which contains secret store type
+	SecretStorePrefixEnvVar = "SECRET_STORE_PREFIX"
 )
 
 // Config contains configuration data
@@ -35,6 +41,9 @@ type Config struct {
 	Staging     bool
 	Topic       string
 	RenewBefore int
+
+	SecretStoreType   string
+	SecretStorePrefix string
 }
 
 // InitConfig initializes configuration of the lambda function
@@ -50,6 +59,9 @@ func InitConfig(payload Payload) *Config {
 		Staging:     isStaging(os.Getenv(StagingEnvVar)),
 		Topic:       os.Getenv(TopicEnvVar),
 		RenewBefore: renewBefore,
+
+		SecretStoreType:   os.Getenv(SecretStoreTypeEnvVar),
+		SecretStorePrefix: os.Getenv(SecretStorePrefixEnvVar),
 	}
 
 	// Load domains
@@ -75,6 +87,14 @@ func InitConfig(payload Payload) *Config {
 	// Load renew before days value
 	if payload.RenewBefore > 0 {
 		config.RenewBefore = payload.RenewBefore
+	}
+
+	if len(payload.SecretStoreType) > 0 {
+		config.SecretStoreType = payload.SecretStoreType
+	}
+
+	if len(payload.SecretStorePrefix) > 0 {
+		config.SecretStorePrefix = payload.SecretStorePrefix
 	}
 
 	return config

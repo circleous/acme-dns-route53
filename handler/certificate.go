@@ -8,29 +8,34 @@ import (
 
 	"github.com/begmaroman/acme-dns-route53/certstore"
 	"github.com/begmaroman/acme-dns-route53/notifier"
+	"github.com/begmaroman/acme-dns-route53/secretstore"
 )
 
 // CertificateHandlerOptions is the options of certificate handler
 type CertificateHandlerOptions struct {
+	SecretStoreType string
+
 	Staging           bool
-	ConfigDir         string
 	NotificationTopic string
 	RenewBefore       int
 
-	Store    certstore.CertStore
-	Notifier notifier.Notifier
-	DNS01    challenge.Provider
+	SecretStore secretstore.SecretStore
+	Store       certstore.CertStore
+	Notifier    notifier.Notifier
+	DNS01       challenge.Provider
 
 	Log *logrus.Logger
 }
 
 // CertificateHandler is the certificates handler
 type CertificateHandler struct {
+	secretStoreType string
+
 	isStaging         bool
-	configDir         string
 	notificationTopic string
 	renewBefore       int
 
+	secret   secretstore.SecretStore
 	store    certstore.CertStore
 	notifier notifier.Notifier
 	dns01    challenge.Provider
@@ -40,13 +45,14 @@ type CertificateHandler struct {
 // NewCertificateHandler is the constructor of CertificateHandler
 func NewCertificateHandler(opts *CertificateHandlerOptions) *CertificateHandler {
 	return &CertificateHandler{
+		secretStoreType:   opts.SecretStoreType,
 		isStaging:         opts.Staging,
+		secret:            opts.SecretStore,
 		store:             opts.Store,
 		notificationTopic: opts.NotificationTopic,
 		renewBefore:       opts.RenewBefore,
 		notifier:          opts.Notifier,
 		dns01:             opts.DNS01,
-		configDir:         opts.ConfigDir,
 		log:               opts.Log,
 	}
 }
